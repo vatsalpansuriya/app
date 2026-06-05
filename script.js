@@ -1442,9 +1442,26 @@ document.addEventListener("click", (event) => {
   }
 });
 
-if (localStorage.getItem("serviceflowTheme") === "dark") {
-  document.body.classList.add("dark");
+// Theme: honor a manual choice if set, otherwise follow the system setting.
+const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+function applySystemTheme() {
+  document.body.classList.toggle("dark", prefersDark.matches);
 }
+const storedTheme = localStorage.getItem("serviceflowTheme");
+if (storedTheme === "dark") {
+  document.body.classList.add("dark");
+} else if (storedTheme === "light") {
+  document.body.classList.remove("dark");
+} else {
+  applySystemTheme();
+}
+// Live-update when the OS theme changes, unless the user picked one manually.
+prefersDark.addEventListener("change", () => {
+  if (!localStorage.getItem("serviceflowTheme")) {
+    applySystemTheme();
+    applyTranslations();
+  }
+});
 
 applyDealerAuth();
 renderAll();
