@@ -1,6 +1,6 @@
 // ServiceFlow PWA service worker.
 // Bump CACHE_VERSION whenever app-shell files change to force an update.
-const CACHE_VERSION = "serviceflow-v2";
+const CACHE_VERSION = "serviceflow-v3";
 const APP_SHELL = [
   "/",
   "/index.html",

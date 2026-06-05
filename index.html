@@ -143,7 +143,23 @@
               <button class="primary-button wide" type="submit" data-i18n="submit">Submit</button>
             </form>
 
-            <div id="customerTracking" hidden></div>
+            <section class="panel">
+              <div class="section-heading">
+                <p class="eyebrow" data-i18n="trackEyebrow">Track</p>
+                <h2 data-i18n="trackTitle">Track your complaint</h2>
+              </div>
+              <div class="track-search">
+                <input
+                  id="trackInput"
+                  type="search"
+                  placeholder="Enter complaint ID or phone number"
+                />
+                <button id="trackButton" class="primary-button" type="button" data-i18n="trackButton">
+                  Track
+                </button>
+              </div>
+              <div id="customerTracking" hidden></div>
+            </section>
             <div id="serviceHistory" hidden></div>
           </div>
         </section>
@@ -181,8 +197,9 @@
             <button class="dealer-tab active" type="button" data-dealer-tab="total">Total com.</button>
             <button class="dealer-tab" type="button" data-dealer-tab="active">Active coml.</button>
             <button class="dealer-tab" type="button" data-dealer-tab="history">Customer history</button>
+            <button class="dealer-tab" type="button" data-dealer-tab="analytics" data-i18n="analyticsTab">Analytics</button>
           </div>
-          <div class="metric-grid" id="dealerMetrics"></div>
+          <div class="metric-grid dealer-tab-panel" id="dealerMetrics" data-tab-panel="total active history"></div>
           <div class="grid two-columns">
             <section class="panel dealer-tab-panel" data-tab-panel="total active">
               <div class="section-heading">
@@ -215,6 +232,12 @@
                   <select id="productFilter"></select>
                 </label>
               </div>
+              <div class="list-toolbar">
+                <span id="complaintCount" class="muted-count"></span>
+                <button id="exportCsv" class="utility-button" type="button" data-i18n="exportCsv">
+                  Export CSV
+                </button>
+              </div>
               <div id="complaintList" class="complaint-list"></div>
             </section>
             <section class="panel dealer-tab-panel" data-tab-panel="total active">
@@ -236,6 +259,27 @@
               <div id="dealerCustomerHistory" class="history-list"></div>
             </section>
           </div>
+          <section class="panel dealer-tab-panel" data-tab-panel="analytics" hidden>
+            <div class="section-heading">
+              <p class="eyebrow" data-i18n="analyticsEyebrow">Insights</p>
+              <h2 data-i18n="analyticsTitle">Analytics Overview</h2>
+            </div>
+            <div id="analyticsStats" class="analytics-stats"></div>
+            <div class="analytics-grid">
+              <article class="chart-card">
+                <h3 data-i18n="byStatus">By status</h3>
+                <div id="chartStatus"></div>
+              </article>
+              <article class="chart-card">
+                <h3 data-i18n="byCompany">By company</h3>
+                <div id="chartCompany"></div>
+              </article>
+              <article class="chart-card chart-wide">
+                <h3 data-i18n="last7">Submissions (last 7 days)</h3>
+                <div id="chartTrend"></div>
+              </article>
+            </div>
+          </section>
           </div>
         </section>
       </main>
@@ -267,7 +311,18 @@
         </header>
         <div class="share-preview">
           <textarea id="shareText" readonly rows="6"></textarea>
-          <p>Use this text for WhatsApp, SMS, or internal sharing.</p>
+          <div class="share-actions">
+            <button id="shareWhatsapp" class="primary-button" type="button" data-i18n="sendWhatsapp">
+              Send on WhatsApp
+            </button>
+            <button id="sharePrint" class="utility-button" type="button" data-i18n="printBill">
+              Print bill
+            </button>
+            <button id="shareCopy" class="utility-button" type="button" data-i18n="copyText">
+              Copy text
+            </button>
+          </div>
+          <p data-i18n="shareHint">Send the live tracking link to the customer.</p>
         </div>
       </section>
     </div>

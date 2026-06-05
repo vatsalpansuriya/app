@@ -69,6 +69,27 @@ const translations = {
     password: "Password",
     unlockDashboard: "Unlock dashboard",
     logout: "Logout",
+    trackEyebrow: "Track",
+    trackTitle: "Track your complaint",
+    trackButton: "Track",
+    analyticsTab: "Analytics",
+    exportCsv: "Export CSV",
+    analyticsEyebrow: "Insights",
+    analyticsTitle: "Analytics Overview",
+    byStatus: "By status",
+    byCompany: "By company",
+    last7: "Submissions (last 7 days)",
+    sendWhatsapp: "Send on WhatsApp",
+    printBill: "Print bill",
+    copyText: "Copy text",
+    shareHint: "Send the live tracking link to the customer.",
+    whatsapp: "WhatsApp",
+    solveRate: "Solve rate",
+    avgOpenHours: "Avg open (active)",
+    openNow: "Open now",
+    resolved: "Resolved",
+    noTrackResults: "No complaint found for that ID or phone number.",
+    trackPrompt: "Enter your complaint ID or phone number to see live status.",
   },
   gu: {
     brandTag: "રિપેર ફરિયાદ સુટ",
@@ -140,6 +161,27 @@ const translations = {
     password: "પાસવર્ડ",
     unlockDashboard: "ડેશબોર્ડ ખોલો",
     logout: "લોગઆઉટ",
+    trackEyebrow: "ટ્રેક",
+    trackTitle: "તમારી ફરિયાદ ટ્રેક કરો",
+    trackButton: "ટ્રેક",
+    analyticsTab: "એનાલિટિક્સ",
+    exportCsv: "CSV ડાઉનલોડ",
+    analyticsEyebrow: "ઇનસાઇટ્સ",
+    analyticsTitle: "એનાલિટિક્સ ઝાંખી",
+    byStatus: "સ્ટેટસ પ્રમાણે",
+    byCompany: "કંપની પ્રમાણે",
+    last7: "સબમિશન (છેલ્લા 7 દિવસ)",
+    sendWhatsapp: "વોટ્સએપ પર મોકલો",
+    printBill: "બિલ પ્રિન્ટ કરો",
+    copyText: "ટેક્સ્ટ કોપી કરો",
+    shareHint: "ગ્રાહકને લાઇવ ટ્રેકિંગ લિંક મોકલો.",
+    whatsapp: "વોટ્સએપ",
+    solveRate: "ઉકેલ દર",
+    avgOpenHours: "સરેરાશ ખુલ્લો (સક્રિય)",
+    openNow: "હાલ ખુલ્લી",
+    resolved: "ઉકેલાયેલ",
+    noTrackResults: "આ ID અથવા ફોન નંબર માટે કોઈ ફરિયાદ મળી નથી.",
+    trackPrompt: "લાઇવ સ્ટેટસ જોવા માટે તમારી ફરિયાદ ID અથવા ફોન નંબર દાખલ કરો.",
   },
 };
 
@@ -185,6 +227,8 @@ let historySearchTerm = "";
 let dealerTab = "total";
 let dealerToken = localStorage.getItem("serviceflowDealerToken") || "";
 let trackFilterId = null;
+let trackQuery = "";
+let activeShareComplaint = null;
 
 const now = Date.now();
 let complaints = [
@@ -274,6 +318,10 @@ function statusText(status) {
     Review: "રીવ્યુ",
   };
   return statuses[status] || status;
+}
+
+function statusClass(status) {
+  return `s-${String(status).toLowerCase()}`;
 }
 
 function elapsedMs(complaint) {
@@ -486,9 +534,27 @@ function statusTimeline(complaint) {
     .join("");
 }
 
+function getTrackList() {
+  if (trackQuery) {
+    const q = trackQuery.toLowerCase();
+    const digits = q.replace(/\D/g, "");
+    return complaints.filter(
+      (item) =>
+        item.id.toLowerCase().includes(q) ||
+        (digits && item.phone.replace(/\D/g, "").includes(digits)),
+    );
+  }
+  if (trackFilterId) return complaints.filter((item) => item.id === trackFilterId);
+  return complaints;
+}
+
 function renderCustomerTracking() {
   const container = document.getElementById("customerTracking");
-  const list = trackFilterId ? complaints.filter((item) => item.id === trackFilterId) : complaints;
+  const list = getTrackList();
+  if ((trackQuery || trackFilterId) && !list.length) {
+    container.innerHTML = `<article class="empty-state"><strong>${t("noTrackResults")}</strong></article>`;
+    return;
+  }
   container.innerHTML = list
     .map(
       (complaint) => `
@@ -518,7 +584,7 @@ function renderServiceHistory() {
         <article class="history-item">
           <strong>${t("complaintNo")} ${item.id} - ${item.product}</strong>
           <p>${item.type} at ${item.company}</p>
-          <span class="badge">${statusText(item.status)}</span>
+          <span class="badge ${statusClass(item.status)}">${statusText(item.status)}</span>
           <button class="mini-bill-button" data-view-bill="${item.id}" ${item.billUrl ? "" : "disabled"}>${t("viewBill")}</button>
         </article>
       `,
@@ -617,6 +683,13 @@ function renderComplaints() {
   const container = document.getElementById("complaintList");
   const visibleComplaints = getVisibleComplaints();
 
+  const countEl = document.getElementById("complaintCount");
+  if (countEl) {
+    countEl.textContent = `${visibleComplaints.length} ${
+      visibleComplaints.length === 1 ? t("complaintWord") : t("complaintsWord")
+    }`;
+  }
+
   if (!visibleComplaints.length) {
     container.innerHTML = `
       <article class="empty-state">
@@ -636,7 +709,7 @@ function renderComplaints() {
             <strong>${t("complaintNo")} ${item.id} - ${item.name}</strong>
             <p>${item.company} ${item.product} | ${item.type} | <span data-list-timer-id="${item.id}">${formatDuration(elapsedMs(item))}</span> open</p>
           </div>
-          <span class="badge" data-badge-id="${item.id}">${isDelayed(item) ? statusText("Delayed") : statusText(item.status)}</span>
+          <span class="badge ${isDelayed(item) ? statusClass("Delayed") : statusClass(item.status)}" data-badge-id="${item.id}">${isDelayed(item) ? statusText("Delayed") : statusText(item.status)}</span>
         </header>
         <dl class="complaint-details">
           <div><dt>${t("phoneLabel")}</dt><dd>${item.phone}</dd></div>
@@ -657,6 +730,7 @@ function renderComplaints() {
           <button class="status-button" data-view-bill="${item.id}" ${item.billUrl ? "" : "disabled"}>${t("viewBill")}</button>
           <button class="status-button" data-view-product="${item.id}" ${item.productImageUrl ? "" : "disabled"}>Product Image</button>
           <button class="status-button" data-share="${item.id}">${t("share")}</button>
+          <button class="status-button accept" data-whatsapp="${item.id}">${t("whatsapp")}</button>
         </div>
       </article>
     `,
@@ -690,6 +764,203 @@ function renderAlerts() {
     .join("");
 }
 
+const STATUS_COLORS = {
+  Pending: "#d97706",
+  Accepted: "#2563eb",
+  Working: "#7c3aed",
+  Solved: "#059669",
+  Rejected: "#6b7280",
+};
+
+function barChartHtml(rows) {
+  if (!rows.length) return `<p class="muted-count">No data yet.</p>`;
+  const max = Math.max(1, ...rows.map((row) => row.value));
+  return rows
+    .map(
+      (row) => `
+        <div class="bar-row">
+          <span class="bar-label">${row.label}</span>
+          <span class="bar-track"><span class="bar-fill" style="width:${(row.value / max) * 100}%${
+            row.color ? `;background:${row.color}` : ""
+          }"></span></span>
+          <span class="bar-value">${row.value}</span>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function getLast7Days() {
+  const days = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+    const value = complaints.filter(
+      (item) => item.submittedAt >= start.getTime() && item.submittedAt < end.getTime(),
+    ).length;
+    days.push({ label: start.toLocaleDateString("en-US", { weekday: "short" }), value });
+  }
+  return days;
+}
+
+function trendChartHtml(days) {
+  const max = Math.max(1, ...days.map((day) => day.value));
+  return `<div class="trend">${days
+    .map(
+      (day) => `
+        <div class="trend-col">
+          <div class="trend-bar" style="height:${(day.value / max) * 100}%"></div>
+          <div class="trend-meta"><strong>${day.value}</strong><span>${day.label}</span></div>
+        </div>`,
+    )
+    .join("")}</div>`;
+}
+
+function renderAnalytics() {
+  const statsEl = document.getElementById("analyticsStats");
+  const statusEl = document.getElementById("chartStatus");
+  const companyEl = document.getElementById("chartCompany");
+  const trendEl = document.getElementById("chartTrend");
+  if (!statsEl || !statusEl || !companyEl || !trendEl) return;
+
+  const total = complaints.length;
+  const solved = complaints.filter((item) => item.status === "Solved").length;
+  const active = complaints.filter((item) => item.status !== "Solved" && item.status !== "Rejected");
+  const solveRate = total ? Math.round((solved / total) * 100) : 0;
+  const avgOpen = active.length
+    ? Math.round(active.reduce((sum, item) => sum + elapsedHours(item), 0) / active.length)
+    : 0;
+
+  statsEl.innerHTML = [
+    [t("solveRate"), `${solveRate}%`],
+    [t("openNow"), active.length],
+    [t("resolved"), solved],
+    [t("avgOpenHours"), `${avgOpen}h`],
+  ]
+    .map(
+      ([label, value]) =>
+        `<article class="stat-card"><span>${label}</span><strong>${value}</strong></article>`,
+    )
+    .join("");
+
+  statusEl.innerHTML = barChartHtml(
+    statusFlow.map((status) => ({
+      label: statusText(status),
+      value: complaints.filter((item) => item.status === status).length,
+      color: STATUS_COLORS[status],
+    })),
+  );
+
+  const companies = [...new Set(complaints.map((item) => item.company))];
+  companyEl.innerHTML = barChartHtml(
+    companies
+      .map((company) => ({
+        label: company,
+        value: complaints.filter((item) => item.company === company).length,
+      }))
+      .sort((a, b) => b.value - a.value),
+  );
+
+  trendEl.innerHTML = trendChartHtml(getLast7Days());
+}
+
+function exportComplaintsCsv() {
+  const rows = getVisibleComplaints();
+  const headers = [
+    "ID", "Name", "Phone", "Company", "Product", "Issue",
+    "Status", "Priority", "ETA (h)", "Submitted", "Smart Note",
+  ];
+  const escape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const lines = [headers.join(",")];
+  rows.forEach((item) => {
+    lines.push(
+      [
+        item.id, item.name, item.phone, item.company, item.product, item.type,
+        isDelayed(item) ? "Delayed" : item.status, item.priority, item.estimatedHours,
+        formatDateTime(item.submittedAt), item.smartNote,
+      ]
+        .map(escape)
+        .join(","),
+    );
+  });
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `serviceflow-complaints-${Date.now()}.csv`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${rows.length} complaints to CSV.`);
+}
+
+function buildTrackingMessage(complaint) {
+  const link = `${window.location.origin}/?track=${encodeURIComponent(complaint.id)}`;
+  return [
+    `ServiceFlow update for ${complaint.id}`,
+    `Customer: ${complaint.name}`,
+    `Product: ${complaint.company} ${complaint.product}`,
+    `Issue: ${complaint.type}`,
+    `Status: ${isDelayed(complaint) ? "Delayed" : complaint.status}`,
+    `ETA: ${complaint.estimatedHours}h`,
+    `Track live: ${link}`,
+  ].join("\n");
+}
+
+function openWhatsapp(complaint) {
+  if (!complaint) return;
+  const phone = String(complaint.phone || "").replace(/\D/g, "");
+  const text = encodeURIComponent(buildTrackingMessage(complaint));
+  const base = phone ? `https://wa.me/${phone}` : "https://wa.me/";
+  window.open(`${base}?text=${text}`, "_blank", "noopener");
+}
+
+function printBill(complaint) {
+  if (!complaint) return;
+  const win = window.open("", "_blank", "width=460,height=680");
+  if (!win) {
+    showToast("Allow pop-ups to print the bill.");
+    return;
+  }
+  const link = `${window.location.origin}/?track=${encodeURIComponent(complaint.id)}`;
+  const safe = (value) =>
+    String(value ?? "").replace(/[<>&]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[ch]));
+  const row = (label, value) => `<tr><td>${label}</td><td>${safe(value)}</td></tr>`;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8" />
+    <title>Bill ${safe(complaint.id)}</title>
+    <style>
+      body{font-family:Inter,Arial,sans-serif;color:#0a0a0c;padding:28px;margin:0;}
+      h1{font-size:20px;margin:0 0 4px;letter-spacing:-0.02em;}
+      .muted{color:#6b7280;font-size:12px;}
+      table{width:100%;border-collapse:collapse;margin-top:18px;}
+      td{padding:9px 0;border-bottom:1px solid #eee;font-size:14px;vertical-align:top;}
+      td:first-child{color:#6b7280;width:42%;}
+      img{max-width:100%;margin-top:18px;border:1px solid #eee;border-radius:8px;}
+      .foot{margin-top:22px;font-size:12px;color:#6b7280;word-break:break-all;}
+    </style></head><body>
+    <h1>ServiceFlow Service Bill</h1>
+    <div class="muted">Complaint ${safe(complaint.id)}</div>
+    <table>
+      ${row("Customer", complaint.name)}
+      ${row("Phone", complaint.phone)}
+      ${row("Company", complaint.company)}
+      ${row("Product", complaint.product)}
+      ${row("Issue", complaint.type)}
+      ${row("Status", isDelayed(complaint) ? "Delayed" : complaint.status)}
+      ${row("Priority", complaint.priority)}
+      ${row("ETA", `${complaint.estimatedHours}h`)}
+      ${row("Submitted", formatDateTime(complaint.submittedAt))}
+      ${row("Smart Note", complaint.smartNote)}
+    </table>
+    ${complaint.billUrl ? `<img src="${complaint.billUrl}" alt="bill" />` : ""}
+    <div class="foot">Track live: ${safe(link)}</div>
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`);
+  win.document.close();
+}
+
 function renderAll() {
   renderDealerTabs();
   renderCompanyProductSelectors();
@@ -703,6 +974,7 @@ function renderAll() {
   renderMetrics();
   renderComplaints();
   renderAlerts();
+  renderAnalytics();
   applyTranslations();
 }
 
@@ -730,7 +1002,11 @@ function updateLiveTimers() {
       dealerCard.classList.toggle("delayed", delayed);
       delayedCountChanged = true;
     }
-    if (badge) badge.textContent = delayed ? statusText("Delayed") : statusText(complaint.status);
+    if (badge) {
+      const badgeKey = delayed ? "Delayed" : complaint.status;
+      badge.textContent = statusText(badgeKey);
+      badge.className = `badge ${statusClass(badgeKey)}`;
+    }
     if (note) {
       note.textContent = delayed
         ? "Delayed alert active: dealer and customer notifications required."
@@ -863,19 +1139,10 @@ function closeBillModal() {
 
 function openShareModal(complaint) {
   const modal = document.getElementById("shareModal");
-  const shareMessage = [
-    `Complaint: ${complaint.id}`,
-    `Customer: ${complaint.name} (${complaint.phone})`,
-    `Company: ${complaint.company}`,
-    `Product: ${complaint.product}`,
-    `Issue: ${complaint.type}`,
-    `ETA: ${complaint.estimatedHours}h`,
-    `Status: ${isDelayed(complaint) ? "Delayed" : complaint.status}`,
-    `Open Time: ${formatDuration(elapsedMs(complaint))}`,
-  ].join("\n");
+  activeShareComplaint = complaint;
 
   document.getElementById("shareModalTitle").textContent = `${complaint.id} - ${complaint.product}`;
-  document.getElementById("shareText").value = shareMessage;
+  document.getElementById("shareText").value = buildTrackingMessage(complaint);
   modal.classList.add("visible");
   modal.setAttribute("aria-hidden", "false");
 }
@@ -1052,6 +1319,37 @@ document.getElementById("historySearch").addEventListener("input", (event) => {
   renderDealerCustomerHistory();
 });
 
+function runCustomerTrack() {
+  trackQuery = document.getElementById("trackInput").value.trim();
+  const tracking = document.getElementById("customerTracking");
+  tracking.hidden = false;
+  renderCustomerTracking();
+}
+
+document.getElementById("trackButton").addEventListener("click", runCustomerTrack);
+document.getElementById("trackInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    runCustomerTrack();
+  }
+});
+
+document.getElementById("exportCsv").addEventListener("click", exportComplaintsCsv);
+
+document.getElementById("shareWhatsapp").addEventListener("click", () => openWhatsapp(activeShareComplaint));
+document.getElementById("sharePrint").addEventListener("click", () => printBill(activeShareComplaint));
+document.getElementById("shareCopy").addEventListener("click", async () => {
+  const text = document.getElementById("shareText").value;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast("Tracking message copied.");
+  } catch (error) {
+    document.getElementById("shareText").select();
+    document.execCommand("copy");
+    showToast("Tracking message copied.");
+  }
+});
+
 document.getElementById("complaintForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -1090,6 +1388,7 @@ document.addEventListener("click", (event) => {
   const statusButton = event.target.closest("[data-status]");
   const editButton = event.target.closest("[data-edit-id]");
   const shareButton = event.target.closest("[data-share]");
+  const whatsappButton = event.target.closest("[data-whatsapp]");
   const billButton = event.target.closest("[data-view-bill]");
   const productButton = event.target.closest("[data-view-product]");
   const closeModalButton = event.target.closest("[data-close-modal]");
@@ -1117,6 +1416,11 @@ document.addEventListener("click", (event) => {
   if (shareButton) {
     const complaint = complaints.find((item) => item.id === shareButton.dataset.share);
     openShareModal(complaint);
+  }
+
+  if (whatsappButton) {
+    const complaint = complaints.find((item) => item.id === whatsappButton.dataset.whatsapp);
+    openWhatsapp(complaint);
   }
 
   if (billButton) {
