@@ -1,6 +1,6 @@
 // ServiceFlow PWA service worker.
 // Bump CACHE_VERSION whenever app-shell files change to force an update.
-const CACHE_VERSION = "serviceflow-v1";
+const CACHE_VERSION = "serviceflow-v2";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -58,7 +58,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: cache-first, then network (and cache the result).
+  // Core app code (HTML/JS/CSS): network-first so deploys take effect
+  // immediately, with a cached fallback for offline use.
+  const isCoreAsset =
+    url.origin === self.location.origin && /\.(?:js|css|html)$/.test(url.pathname);
+  if (isCoreAsset) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Other static assets (icons, fonts, images): cache-first, then network.
   event.respondWith(
     caches.match(request).then(
       (cached) =>
