@@ -63,6 +63,12 @@ const translations = {
     repairPerformance: "Repair Performance",
     alertSystem: "36 Hour Alert System",
     delayReminder: "AI & Alerts",
+    dealerAccess: "Dealer access",
+    signInTitle: "Sign in to the dashboard",
+    signInSubtitle: "Enter the dealer password to manage complaints.",
+    password: "Password",
+    unlockDashboard: "Unlock dashboard",
+    logout: "Logout",
   },
   gu: {
     brandTag: "રિપેર ફરિયાદ સુટ",
@@ -128,6 +134,12 @@ const translations = {
     repairPerformance: "રિપેર કામગીરી",
     alertSystem: "36 કલાક એલર્ટ સિસ્ટમ",
     delayReminder: "AI અને એલર્ટ",
+    dealerAccess: "ડીલર એક્સેસ",
+    signInTitle: "ડેશબોર્ડમાં સાઇન ઇન કરો",
+    signInSubtitle: "ફરિયાદો મેનેજ કરવા માટે ડીલર પાસવર્ડ દાખલ કરો.",
+    password: "પાસવર્ડ",
+    unlockDashboard: "ડેશબોર્ડ ખોલો",
+    logout: "લોગઆઉટ",
   },
 };
 
@@ -171,6 +183,8 @@ let companyFilter = "All";
 let productFilter = "All";
 let historySearchTerm = "";
 let dealerTab = "total";
+let dealerToken = localStorage.getItem("serviceflowDealerToken") || "";
+let trackFilterId = null;
 
 const now = Date.now();
 let complaints = [
@@ -474,7 +488,8 @@ function statusTimeline(complaint) {
 
 function renderCustomerTracking() {
   const container = document.getElementById("customerTracking");
-  container.innerHTML = complaints
+  const list = trackFilterId ? complaints.filter((item) => item.id === trackFilterId) : complaints;
+  container.innerHTML = list
     .map(
       (complaint) => `
         <article class="tracking-card ${isDelayed(complaint) ? "delayed" : ""}" data-complaint-id="${complaint.id}">
@@ -738,8 +753,8 @@ function showToast(message) {
 
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   if (!response.ok) {
     throw new Error(`API error ${response.status}`);
@@ -758,6 +773,7 @@ async function loadComplaintsFromDatabase() {
   } catch (error) {
     showToast("Database is offline. Using local demo data.");
   }
+  handleTrackParam();
 }
 
 async function createComplaint(complaint) {
@@ -775,10 +791,16 @@ async function updateComplaint(id, updates) {
   try {
     await apiRequest(`/api/complaints/${encodeURIComponent(id)}`, {
       method: "PATCH",
+      headers: dealerToken ? { Authorization: `Bearer ${dealerToken}` } : {},
       body: JSON.stringify(updates),
     });
   } catch (error) {
-    showToast("Updated locally only. Database connection failed.");
+    if (String(error.message).includes("401")) {
+      dealerLogout();
+      showToast("Session expired. Please sign in again.");
+    } else {
+      showToast("Updated locally only. Database connection failed.");
+    }
   }
 }
 
@@ -864,6 +886,57 @@ function closeShareModal() {
   modal.setAttribute("aria-hidden", "true");
 }
 
+// ---------- Dealer authentication ----------
+function isDealerAuthed() {
+  return Boolean(dealerToken);
+}
+
+function applyDealerAuth() {
+  const login = document.getElementById("dealerLogin");
+  const content = document.getElementById("dealerContent");
+  const authed = isDealerAuthed();
+  if (login) login.hidden = authed;
+  if (content) content.hidden = !authed;
+}
+
+async function dealerLogin(password) {
+  const response = await fetch("/api/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw new Error("Invalid password");
+  const data = await response.json();
+  dealerToken = data.token;
+  localStorage.setItem("serviceflowDealerToken", dealerToken);
+}
+
+function dealerLogout() {
+  dealerToken = "";
+  localStorage.removeItem("serviceflowDealerToken");
+  applyDealerAuth();
+  showToast("Logged out of dealer dashboard.");
+}
+
+// ---------- Tracking deep link (?track=ID) ----------
+function handleTrackParam() {
+  const id = new URLSearchParams(window.location.search).get("track");
+  if (!id) return;
+  trackFilterId = id;
+  currentView = "customer";
+  document
+    .querySelectorAll(".nav-item")
+    .forEach((item) => item.classList.toggle("active", item.dataset.view === "customer"));
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("active-view"));
+  document.getElementById("customer").classList.add("active-view");
+  const tracking = document.getElementById("customerTracking");
+  if (tracking) tracking.hidden = false;
+  renderCustomerTracking();
+  applyTranslations();
+  const card = document.querySelector(`.tracking-card[data-complaint-id="${CSS.escape(id)}"]`);
+  if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
     currentView = button.dataset.view;
@@ -871,6 +944,7 @@ document.querySelectorAll(".nav-item").forEach((button) => {
     document.querySelectorAll(".view").forEach((view) => view.classList.remove("active-view"));
     button.classList.add("active");
     document.getElementById(currentView).classList.add("active-view");
+    if (currentView === "dealer") applyDealerAuth();
     applyTranslations();
   });
 });
@@ -890,8 +964,30 @@ document.getElementById("languageToggle").addEventListener("click", () => {
 
 document.getElementById("themeToggle").addEventListener("click", () => {
   document.body.classList.toggle("dark");
+  localStorage.setItem(
+    "serviceflowTheme",
+    document.body.classList.contains("dark") ? "dark" : "light",
+  );
   applyTranslations();
 });
+
+document.getElementById("dealerLoginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.getElementById("dealerPassword");
+  const errorEl = document.getElementById("dealerLoginError");
+  errorEl.textContent = "";
+  try {
+    await dealerLogin(input.value);
+    input.value = "";
+    applyDealerAuth();
+    renderAll();
+    showToast("Welcome to the Dealer Dashboard.");
+  } catch (error) {
+    errorEl.textContent = "Incorrect password. Please try again.";
+  }
+});
+
+document.getElementById("dealerLogout").addEventListener("click", dealerLogout);
 
 document.getElementById("toastDemo").addEventListener("click", () => {
   const delayed = complaints.filter(isDelayed);
@@ -1042,6 +1138,11 @@ document.addEventListener("click", (event) => {
   }
 });
 
+if (localStorage.getItem("serviceflowTheme") === "dark") {
+  document.body.classList.add("dark");
+}
+
+applyDealerAuth();
 renderAll();
 loadComplaintsFromDatabase();
 window.setTimeout(() => {
@@ -1051,3 +1152,17 @@ window.setTimeout(() => {
 window.setInterval(() => {
   updateLiveTimers();
 }, 1000);
+
+// Keep the Dealer Dashboard fresh so new customer submissions appear live.
+window.setInterval(async () => {
+  if (currentView !== "dealer" || !isDealerAuthed()) return;
+  try {
+    complaints = await apiRequest("/api/complaints");
+    renderMetrics();
+    renderComplaints();
+    renderAlerts();
+    renderDealerCustomerHistory();
+  } catch (error) {
+    /* ignore transient refresh errors */
+  }
+}, 15000);

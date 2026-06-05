@@ -3,8 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#10141c" />
+    <meta name="theme-color" content="#ffffff" />
     <title>ServiceFlow Complaint App</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- PWA: installable on Android & iOS -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ServiceFlow" />
+
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="loading">
@@ -132,6 +149,34 @@
         </section>
 
         <section id="dealer" class="view">
+          <div id="dealerLogin" class="dealer-lock">
+            <form id="dealerLoginForm" class="login-card">
+              <p class="eyebrow" data-i18n="dealerAccess">Dealer access</p>
+              <h2 data-i18n="signInTitle">Sign in to the dashboard</h2>
+              <p data-i18n="signInSubtitle">Enter the dealer password to manage complaints.</p>
+              <label>
+                <span data-i18n="password">Password</span>
+                <input
+                  id="dealerPassword"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                  required
+                />
+              </label>
+              <button class="primary-button wide" type="submit" data-i18n="unlockDashboard">
+                Unlock dashboard
+              </button>
+              <p id="dealerLoginError" class="login-error" role="alert"></p>
+            </form>
+          </div>
+
+          <div id="dealerContent" hidden>
+            <div class="profile-actions" style="justify-content: flex-end">
+              <button id="dealerLogout" class="utility-button" type="button" data-i18n="logout">
+                Logout
+              </button>
+            </div>
           <div class="dealer-tabs" role="tablist" aria-label="Dealer dashboard tabs">
             <button class="dealer-tab active" type="button" data-dealer-tab="total">Total com.</button>
             <button class="dealer-tab" type="button" data-dealer-tab="active">Active coml.</button>
@@ -191,6 +236,7 @@
               <div id="dealerCustomerHistory" class="history-list"></div>
             </section>
           </div>
+          </div>
         </section>
       </main>
     </div>
@@ -226,5 +272,15 @@
       </section>
     </div>
     <script src="script.js"></script>
+    <script>
+      // Register the service worker so the app is installable and works offline.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch((err) => {
+            console.error("Service worker registration failed:", err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>
