@@ -46,6 +46,17 @@ const types = {
 // Load the real API handlers (same files Vercel runs).
 const complaintsHandler = require("./api/complaints");
 const authHandler = require("./api/auth");
+const replyHandler = require("./api/reply");
+const inboundHandler = require("./api/twilio-inbound");
+
+function readRaw(request) {
+  return new Promise((resolve) => {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => resolve(body));
+    request.on("error", () => resolve(""));
+  });
+}
 
 function readBody(request) {
   return new Promise((resolve, reject) => {
@@ -98,12 +109,22 @@ http
 
     try {
       if (url.pathname.startsWith("/api/")) {
+        // Twilio posts urlencoded form data.
+        if (url.pathname === "/api/twilio-inbound") {
+          request.body = Object.fromEntries(new URLSearchParams(await readRaw(request)));
+          await inboundHandler(request, response);
+          return;
+        }
         // Parse the JSON body for write methods, mirroring @vercel/node.
         if (request.method === "POST" || request.method === "PATCH" || request.method === "PUT") {
           request.body = await readBody(request);
         }
         if (url.pathname === "/api/auth") {
           await authHandler(request, response);
+          return;
+        }
+        if (url.pathname === "/api/reply") {
+          await replyHandler(request, response);
           return;
         }
         if (url.pathname.startsWith("/api/complaints")) {

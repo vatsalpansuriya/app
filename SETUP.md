@@ -43,8 +43,12 @@ create table if not exists complaints (
 alter table complaints enable row level security;
 ```
 
-Complaint images are stored as base64 data URLs inside `data`. For large volumes
-you can later move them to Supabase Storage and keep only URLs in `data`.
+### Image storage (optional, recommended)
+To keep rows small, images are uploaded to a **public Storage bucket** when
+Supabase is configured (otherwise they stay inline as base64). Create it once:
+Supabase → **Storage** → New bucket → name `complaint-images`, mark **Public**.
+(Override the name with `SUPABASE_BUCKET` if you prefer.) Without the bucket the
+app still works — it just keeps images inline.
 
 ---
 
@@ -70,9 +74,25 @@ The Dealer Dashboard is hidden until login. `PATCH /api/complaints/:id`
    `whatsapp:+14155238886` works to start).
 3. Set `APP_URL` to your deployed URL so tracking links resolve.
 
-When a dealer changes a complaint's status, the customer receives a message with
-a live tracking link: `${APP_URL}/?track=<complaint-id>`. Without Twilio keys,
-the message is logged to the server console instead of sent.
+Customers automatically receive a WhatsApp/SMS message: a **"received"**
+confirmation on submit, a **status update** on every dealer change, and a
+**delay alert** if a complaint passes 36h (the dashboard's polling triggers it;
+no cron needed). Each includes a live tracking link `${APP_URL}/?track=<id>`.
+Without Twilio keys, messages are logged to the server console instead of sent.
+
+### Two-way replies (Inbox)
+To let customers reply (and have it show in the dealer **Inbox** tab), point your
+Twilio number / Messaging Service **inbound webhook** at:
+
+```
+https://<your-app>/api/twilio-inbound   (HTTP POST)
+```
+
+Incoming messages are matched to the customer's most-recent open complaint.
+Dealer replies from the Inbox are sent back over WhatsApp/SMS.
+
+### Optional
+- `DEALER_ALERT_PHONE` — if set, the dealer also gets a copy of every 36h delay alert.
 
 ---
 

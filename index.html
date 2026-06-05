@@ -197,6 +197,8 @@
           <div class="dealer-tabs" role="tablist" aria-label="Dealer dashboard tabs">
             <button class="dealer-tab active" type="button" data-dealer-tab="total">Total com.</button>
             <button class="dealer-tab" type="button" data-dealer-tab="active">Active coml.</button>
+            <button class="dealer-tab" type="button" data-dealer-tab="board" data-i18n="boardTab">Board</button>
+            <button class="dealer-tab" type="button" data-dealer-tab="inbox" data-i18n="inboxTab">Inbox</button>
             <button class="dealer-tab" type="button" data-dealer-tab="history">Customer history</button>
             <button class="dealer-tab" type="button" data-dealer-tab="analytics" data-i18n="analyticsTab">Analytics</button>
           </div>
@@ -235,9 +237,15 @@
               </div>
               <div class="list-toolbar">
                 <span id="complaintCount" class="muted-count"></span>
-                <button id="exportCsv" class="utility-button" type="button" data-i18n="exportCsv">
-                  Export CSV
-                </button>
+                <div class="toolbar-actions">
+                  <button id="importCsv" class="utility-button" type="button" data-i18n="importCsv">
+                    Import CSV
+                  </button>
+                  <button id="exportCsv" class="utility-button" type="button" data-i18n="exportCsv">
+                    Export CSV
+                  </button>
+                  <input id="importCsvInput" type="file" accept=".csv,text/csv" hidden />
+                </div>
               </div>
               <div id="complaintList" class="complaint-list"></div>
             </section>
@@ -279,6 +287,23 @@
                 <h3 data-i18n="last7">Submissions (last 7 days)</h3>
                 <div id="chartTrend"></div>
               </article>
+            </div>
+          </section>
+          <section class="dealer-tab-panel" data-tab-panel="board" hidden>
+            <div class="section-heading">
+              <p class="eyebrow" data-i18n="boardEyebrow">Workflow</p>
+              <h2 data-i18n="boardTitle">Complaint Board</h2>
+            </div>
+            <div id="kanbanBoard" class="kanban"></div>
+          </section>
+          <section class="panel dealer-tab-panel" data-tab-panel="inbox" hidden>
+            <div class="section-heading">
+              <p class="eyebrow" data-i18n="inboxEyebrow">Conversations</p>
+              <h2 data-i18n="inboxTitle">Customer Inbox</h2>
+            </div>
+            <div class="inbox">
+              <div id="inboxList" class="inbox-list"></div>
+              <div id="inboxThread" class="inbox-thread"></div>
             </div>
           </section>
           </div>

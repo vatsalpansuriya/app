@@ -90,6 +90,16 @@ const translations = {
     resolved: "Resolved",
     noTrackResults: "No complaint found for that ID or phone number.",
     trackPrompt: "Enter your complaint ID or phone number to see live status.",
+    boardTab: "Board",
+    inboxTab: "Inbox",
+    importCsv: "Import CSV",
+    boardEyebrow: "Workflow",
+    boardTitle: "Complaint Board",
+    inboxEyebrow: "Conversations",
+    inboxTitle: "Customer Inbox",
+    noConversations: "No conversations yet. Customer replies appear here.",
+    replyPlaceholder: "Type a reply…",
+    send: "Send",
   },
   gu: {
     brandTag: "રિપેર ફરિયાદ સુટ",
@@ -182,6 +192,16 @@ const translations = {
     resolved: "ઉકેલાયેલ",
     noTrackResults: "આ ID અથવા ફોન નંબર માટે કોઈ ફરિયાદ મળી નથી.",
     trackPrompt: "લાઇવ સ્ટેટસ જોવા માટે તમારી ફરિયાદ ID અથવા ફોન નંબર દાખલ કરો.",
+    boardTab: "બોર્ડ",
+    inboxTab: "ઇનબોક્સ",
+    importCsv: "CSV ઇમ્પોર્ટ",
+    boardEyebrow: "વર્કફ્લો",
+    boardTitle: "ફરિયાદ બોર્ડ",
+    inboxEyebrow: "વાતચીત",
+    inboxTitle: "ગ્રાહક ઇનબોક્સ",
+    noConversations: "હજુ કોઈ વાતચીત નથી. ગ્રાહકના જવાબ અહીં દેખાશે.",
+    replyPlaceholder: "જવાબ લખો…",
+    send: "મોકલો",
   },
 };
 
@@ -229,6 +249,13 @@ let dealerToken = localStorage.getItem("serviceflowDealerToken") || "";
 let trackFilterId = null;
 let trackQuery = "";
 let activeShareComplaint = null;
+let activeInboxId = null;
+let draggedId = null;
+const BOARD_COLUMNS = ["Pending", "Accepted", "Working", "Solved", "Rejected"];
+
+function escapeText(value) {
+  return String(value ?? "").replace(/[<>&]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[ch]));
+}
 
 const now = Date.now();
 let complaints = [
@@ -961,6 +988,240 @@ function printBill(complaint) {
   win.document.close();
 }
 
+// ---------- Kanban board ----------
+function kanbanCardHtml(complaint) {
+  const options = BOARD_COLUMNS.map(
+    (s) => `<option value="${s}" ${s === complaint.status ? "selected" : ""}>${statusText(s)}</option>`,
+  ).join("");
+  return `
+    <article class="kanban-card" draggable="true" data-id="${complaint.id}">
+      <div class="kanban-card-head">
+        <strong>${complaint.id}</strong>
+        <span>${elapsedHours(complaint)}h</span>
+      </div>
+      <p class="kanban-card-name">${escapeText(complaint.name)}</p>
+      <p class="kanban-card-meta">${escapeText(complaint.company)} ${escapeText(complaint.product)} · ${escapeText(complaint.type)}</p>
+      <select class="kanban-move" data-id="${complaint.id}" aria-label="Change status">${options}</select>
+    </article>`;
+}
+
+function renderKanban() {
+  const board = document.getElementById("kanbanBoard");
+  if (!board) return;
+  board.innerHTML = BOARD_COLUMNS.map((status) => {
+    const items = complaints.filter((c) => c.status === status);
+    const cards = items.map(kanbanCardHtml).join("") || `<p class="kanban-empty">—</p>`;
+    return `
+      <div class="kanban-col">
+        <div class="kanban-col-head">
+          <span class="badge ${statusClass(status)}">${statusText(status)}</span>
+          <span class="kanban-count">${items.length}</span>
+        </div>
+        <div class="kanban-drop" data-status="${status}">${cards}</div>
+      </div>`;
+  }).join("");
+}
+
+function moveComplaint(id, status) {
+  const complaint = complaints.find((c) => c.id === id);
+  if (!complaint || complaint.status === status) return;
+  complaint.status = status;
+  updateComplaint(id, { status });
+  renderAll();
+  showToast(`${id} moved to ${statusText(status)}.`);
+}
+
+function initBoard() {
+  const board = document.getElementById("kanbanBoard");
+  if (!board) return;
+  board.addEventListener("dragstart", (event) => {
+    const card = event.target.closest(".kanban-card");
+    if (card) {
+      draggedId = card.dataset.id;
+      card.classList.add("dragging");
+    }
+  });
+  board.addEventListener("dragend", (event) => {
+    const card = event.target.closest(".kanban-card");
+    if (card) card.classList.remove("dragging");
+  });
+  board.addEventListener("dragover", (event) => {
+    const drop = event.target.closest(".kanban-drop");
+    if (drop) {
+      event.preventDefault();
+      drop.classList.add("drag-over");
+    }
+  });
+  board.addEventListener("dragleave", (event) => {
+    const drop = event.target.closest(".kanban-drop");
+    if (drop) drop.classList.remove("drag-over");
+  });
+  board.addEventListener("drop", (event) => {
+    const drop = event.target.closest(".kanban-drop");
+    if (!drop) return;
+    event.preventDefault();
+    drop.classList.remove("drag-over");
+    if (draggedId) moveComplaint(draggedId, drop.dataset.status);
+    draggedId = null;
+  });
+  board.addEventListener("change", (event) => {
+    const select = event.target.closest(".kanban-move");
+    if (select) moveComplaint(select.dataset.id, select.value);
+  });
+}
+
+// ---------- Inbox (two-way messages) ----------
+function lastMessageAt(complaint) {
+  const messages = complaint.messages;
+  return messages && messages.length ? messages[messages.length - 1].at : 0;
+}
+
+function getConversations() {
+  return complaints
+    .filter((c) => Array.isArray(c.messages) && c.messages.length)
+    .sort((a, b) => lastMessageAt(b) - lastMessageAt(a));
+}
+
+function renderInbox() {
+  const listEl = document.getElementById("inboxList");
+  const threadEl = document.getElementById("inboxThread");
+  if (!listEl || !threadEl) return;
+
+  const convos = getConversations();
+  if (!convos.length) {
+    listEl.innerHTML = `<div class="empty-state"><strong>${t("noConversations")}</strong></div>`;
+    threadEl.innerHTML = "";
+    return;
+  }
+  if (!activeInboxId || !convos.find((c) => c.id === activeInboxId)) {
+    activeInboxId = convos[0].id;
+  }
+
+  listEl.innerHTML = convos
+    .map((c) => {
+      const last = c.messages[c.messages.length - 1];
+      const preview = `${last.dir === "out" ? "You: " : ""}${escapeText(last.text)}`;
+      return `
+        <button class="inbox-item ${c.id === activeInboxId ? "active" : ""}" data-inbox="${c.id}">
+          <div class="inbox-item-top"><strong>${escapeText(c.name)}</strong><span>${c.id}</span></div>
+          <p>${preview.slice(0, 52)}</p>
+        </button>`;
+    })
+    .join("");
+
+  renderInboxThread();
+}
+
+function renderInboxThread() {
+  const threadEl = document.getElementById("inboxThread");
+  if (!threadEl) return;
+  const complaint = complaints.find((c) => c.id === activeInboxId);
+  if (!complaint) {
+    threadEl.innerHTML = "";
+    return;
+  }
+  const prev = document.getElementById("replyInput");
+  const draft = prev ? prev.value : "";
+  const bubbles = (complaint.messages || [])
+    .map(
+      (m) => `
+        <div class="bubble ${m.dir}">
+          <p>${escapeText(m.text)}</p>
+          <time>${formatDateTime(m.at)}</time>
+        </div>`,
+    )
+    .join("");
+  threadEl.innerHTML = `
+    <div class="thread-head">
+      <strong>${escapeText(complaint.name)}</strong>
+      <span>${escapeText(complaint.phone)} · ${complaint.id}</span>
+    </div>
+    <div class="thread-body">${bubbles}</div>
+    <form class="thread-reply" id="replyForm">
+      <input id="replyInput" type="text" placeholder="${t("replyPlaceholder")}" autocomplete="off" />
+      <button class="primary-button" type="submit">${t("send")}</button>
+    </form>`;
+  document.getElementById("replyInput").value = draft;
+  const body = threadEl.querySelector(".thread-body");
+  if (body) body.scrollTop = body.scrollHeight;
+}
+
+// ---------- CSV import ----------
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (ch !== "\r") {
+      field += ch;
+    }
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+async function importCsvFile(file) {
+  const rows = parseCsv(await file.text());
+  if (rows.length < 2) {
+    showToast("CSV has no data rows.");
+    return;
+  }
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const col = (r, name) => {
+    const i = header.indexOf(name);
+    return i >= 0 ? (r[i] || "").trim() : "";
+  };
+  let count = 0;
+  for (const r of rows.slice(1)) {
+    const submitted = col(r, "submitted");
+    const ts = submitted ? Date.parse(submitted) : Date.now();
+    const complaint = {
+      id: col(r, "id") || `CMP-${nextComplaintNumber++}`,
+      name: col(r, "name"),
+      phone: col(r, "phone"),
+      company: col(r, "company"),
+      product: col(r, "product"),
+      type: col(r, "issue") || col(r, "type") || "Other",
+      status: col(r, "status") || "Pending",
+      submittedAt: Number.isNaN(ts) ? Date.now() : ts,
+      estimatedHours: Number(col(r, "eta (h)") || col(r, "eta")) || 24,
+      priority: col(r, "priority") || "Medium",
+      smartNote: col(r, "smart note") || "",
+      _import: true,
+    };
+    try {
+      await apiRequest("/api/complaints", { method: "POST", body: JSON.stringify(complaint) });
+      count += 1;
+    } catch (error) {
+      /* skip bad row */
+    }
+  }
+  await loadComplaintsFromDatabase();
+  showToast(`Imported ${count} complaints.`);
+}
+
 function renderAll() {
   renderDealerTabs();
   renderCompanyProductSelectors();
@@ -975,6 +1236,8 @@ function renderAll() {
   renderComplaints();
   renderAlerts();
   renderAnalytics();
+  renderKanban();
+  renderInbox();
   applyTranslations();
 }
 
@@ -1336,6 +1599,44 @@ document.getElementById("trackInput").addEventListener("keydown", (event) => {
 
 document.getElementById("exportCsv").addEventListener("click", exportComplaintsCsv);
 
+document.getElementById("importCsv").addEventListener("click", () =>
+  document.getElementById("importCsvInput").click(),
+);
+document.getElementById("importCsvInput").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (file) importCsvFile(file);
+  event.target.value = "";
+});
+
+// Dealer reply in the Inbox.
+document.addEventListener("submit", async (event) => {
+  if (event.target.id !== "replyForm") return;
+  event.preventDefault();
+  const input = document.getElementById("replyInput");
+  const text = input.value.trim();
+  if (!text || !activeInboxId) return;
+  const complaint = complaints.find((c) => c.id === activeInboxId);
+  if (complaint) {
+    complaint.messages = [...(complaint.messages || []), { dir: "out", text, at: Date.now() }];
+  }
+  input.value = "";
+  renderInbox();
+  try {
+    await apiRequest("/api/reply", {
+      method: "POST",
+      headers: dealerToken ? { Authorization: `Bearer ${dealerToken}` } : {},
+      body: JSON.stringify({ id: activeInboxId, text }),
+    });
+  } catch (error) {
+    if (String(error.message).includes("401")) {
+      dealerLogout();
+      showToast("Session expired. Please sign in again.");
+    } else {
+      showToast("Reply saved locally (send failed).");
+    }
+  }
+});
+
 document.getElementById("shareWhatsapp").addEventListener("click", () => openWhatsapp(activeShareComplaint));
 document.getElementById("sharePrint").addEventListener("click", () => printBill(activeShareComplaint));
 document.getElementById("shareCopy").addEventListener("click", async () => {
@@ -1423,6 +1724,12 @@ document.addEventListener("click", (event) => {
     openWhatsapp(complaint);
   }
 
+  const inboxItem = event.target.closest("[data-inbox]");
+  if (inboxItem) {
+    activeInboxId = inboxItem.dataset.inbox;
+    renderInbox();
+  }
+
   if (billButton) {
     const complaint = complaints.find((item) => item.id === billButton.dataset.viewBill);
     openBillModal(complaint);
@@ -1464,6 +1771,7 @@ prefersDark.addEventListener("change", () => {
 });
 
 applyDealerAuth();
+initBoard();
 renderAll();
 loadComplaintsFromDatabase();
 window.setTimeout(() => {
@@ -1483,6 +1791,8 @@ window.setInterval(async () => {
     renderComplaints();
     renderAlerts();
     renderDealerCustomerHistory();
+    renderKanban();
+    renderInbox();
   } catch (error) {
     /* ignore transient refresh errors */
   }
